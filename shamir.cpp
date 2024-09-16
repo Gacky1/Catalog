@@ -10,44 +10,44 @@
 using namespace std;
 using json = nlohmann::json;
 
-
-unsigned long long decodeValue(int base, const string& value) {
-    unsigned long long res = 0;
+// Function to convert values from a given base to decimal
+unsigned long long convertFromBase(int base, const string& value) {
+    unsigned long long result = 0;
     int power = 0;
     for (int i = value.size() - 1; i >= 0; i--) {
         char digit = value[i];
         int num = (isdigit(digit)) ? (digit - '0') : (toupper(digit) - 'A' + 10);
-        res += num * pow(base, power);
+        result += num * pow(base, power);
         power++;
     }
-    return res;
+    return result;
 }
 
-
-vector<pair<int, unsigned long long>> extractPoints(map<int, pair<int, string>>& data) {
+// Function to transform JSON-like input into a vector of points
+vector<pair<int, unsigned long long>> parsePoints(map<int, pair<int, string>>& data) {
     vector<pair<int, unsigned long long>> points;
     
     for (auto& entry : data) {
         int x = entry.first;
         int base = entry.second.first;
         string value = entry.second.second;
-        unsigned long long y = decodeValue(base, value);
+        unsigned long long y = convertFromBase(base, value);
         points.push_back({x, y});
     }
     
     return points;
 }
 
-
-double lagrangeInterpolation(const vector<pair<int, unsigned long long>>& points) {
-    int k = points.size(); // Number of points
+// Function to compute the polynomial constant term using Lagrange interpolation
+double computeLagrangeConstant(const vector<pair<int, unsigned long long>>& points) {
+    int count = points.size(); // Number of points
     double constantTerm = 0.0;
     
-    for (int i = 0; i < k; i++) {
+    for (int i = 0; i < count; i++) {
         double li = 1.0;
         unsigned long long yi = points[i].second;
         
-        for (int j = 0; j < k; j++) {
+        for (int j = 0; j < count; j++) {
             if (i != j) {
                 li *= points[j].first / (double)(points[j].first - points[i].first);
             }
@@ -59,7 +59,8 @@ double lagrangeInterpolation(const vector<pair<int, unsigned long long>>& points
     return constantTerm;
 }
 
-bool isPointConsistent(const vector<pair<int, unsigned long long>>& points, int x, unsigned long long y, double constantTerm) {
+// Function to verify if a given point fits the interpolated polynomial
+bool validatePoint(const vector<pair<int, unsigned long long>>& points, int x, unsigned long long y, double constantTerm) {
     double interpolatedY = 0.0;
     for (int i = 0; i < points.size(); i++) {
         double li = 1.0;
@@ -70,6 +71,10 @@ bool isPointConsistent(const vector<pair<int, unsigned long long>>& points, int 
         }
         interpolatedY += points[i].second * li;
     }
+
+    // Debug output
+    cout << "Testing point (" << x << ", " << y << "): ";
+    cout << "Interpolated Y = " << interpolatedY << ", Actual Y = " << y << ", Difference = " << fabs(interpolatedY - y) << endl;
 
     return fabs(interpolatedY - y) < 1e-6; 
 }
@@ -82,7 +87,6 @@ int main() {
     int n = jsonData["keys"]["n"];
     int k = jsonData["keys"]["k"];
 
-
     map<int, pair<int, string>> rootData;
     for (auto& el : jsonData.items()) {
         if (el.key() == "keys") continue; 
@@ -92,13 +96,13 @@ int main() {
         rootData[x] = {base, encodedY};
     }
 
-    vector<pair<int, unsigned long long>> allPoints = extractPoints(rootData);
+    vector<pair<int, unsigned long long>> allPoints = parsePoints(rootData);
 
     vector<int> indices(n, 0);
     fill(indices.begin(), indices.begin() + k, 1); 
 
-    bool foundSolution = false;
-    vector<int> incorrectRoots;
+    bool solutionFound = false;
+    vector<int> incorrectPoints;
 
     do {
         vector<pair<int, unsigned long long>> selectedPoints;
@@ -112,26 +116,26 @@ int main() {
             }
         }
 
-        double constantTerm = lagrangeInterpolation(selectedPoints);
+        double constantTerm = computeLagrangeConstant(selectedPoints);
 
-        vector<int> currentIncorrectRoots;
+        vector<int> currentIncorrectPoints;
         for (auto& point : remainingPoints) {
-            if (!isPointConsistent(selectedPoints, point.first, point.second, constantTerm)) {
-                currentIncorrectRoots.push_back(point.first);
+            if (!validatePoint(selectedPoints, point.first, point.second, constantTerm)) {
+                currentIncorrectPoints.push_back(point.first);
             }
         }
 
-        if (currentIncorrectRoots.size() <= 3) {  
-            foundSolution = true;
-            incorrectRoots = currentIncorrectRoots;
+        if (currentIncorrectPoints.size() <= 3) {  
+            solutionFound = true;
+            incorrectPoints = currentIncorrectPoints;
             break;
         }
 
     } while (prev_permutation(indices.begin(), indices.end())); 
 
-    if (foundSolution) {
-        cout << " The incorrect roots as per the k value are: ";
-        for (int root : incorrectRoots) {
+    if (solutionFound) {
+        cout << "The incorrect roots as per the k value are: ";
+        for (int root : incorrectPoints) {
             cout << root << " ";
         }
         cout << endl;
