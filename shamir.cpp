@@ -1,59 +1,88 @@
 #include <iostream>
 #include <fstream>
-#include "json.hpp" 
+#include "json.hpp"
 #include <vector>
 #include <string>
 #include <map>
-#include <sstream>
 #include <cmath>
+#include <algorithm> // For next_permutation
+
 using namespace std;
 using json = nlohmann::json;
-unsigned long long decode1(int base, const string& value) {
-    unsigned long long ans = 0;
+
+
+unsigned long long decodeValue(int base, const string& value) {
+    unsigned long long res = 0;
     int power = 0;
     for (int i = value.size() - 1; i >= 0; i--) {
         char digit = value[i];
         int num = (isdigit(digit)) ? (digit - '0') : (toupper(digit) - 'A' + 10);
-        ans += num * pow(base, power);
+        res += num * pow(base, power);
         power++;
     }
-    return ans;
+    return res;
 }
-vector<pair<int, unsigned long long>> extract(map<int, pair<int, string>>& data, int k) {
-    vector<pair<int, unsigned long long>> points;   
-    int count = 0;
+
+
+vector<pair<int, unsigned long long>> extractPoints(map<int, pair<int, string>>& data) {
+    vector<pair<int, unsigned long long>> points;
+    
     for (auto& entry : data) {
-        if (count == k) break; 
         int x = entry.first;
         int base = entry.second.first;
         string value = entry.second.second;
-        unsigned long long y = decode1(base, value);
+        unsigned long long y = decodeValue(base, value);
         points.push_back({x, y});
-        count++;
     }
+    
     return points;
 }
-double solvelagrange(const vector<pair<int, unsigned long long>>& points) {
-    int k = points.size(); 
+
+
+double lagrangeInterpolation(const vector<pair<int, unsigned long long>>& points) {
+    int k = points.size(); // Number of points
     double constantTerm = 0.0;
+    
     for (int i = 0; i < k; i++) {
         double li = 1.0;
         unsigned long long yi = points[i].second;
+        
         for (int j = 0; j < k; j++) {
             if (i != j) {
                 li *= points[j].first / (double)(points[j].first - points[i].first);
             }
         }
+        
         constantTerm += yi * li;
     }
+    
     return constantTerm;
 }
+
+bool isPointConsistent(const vector<pair<int, unsigned long long>>& points, int x, unsigned long long y, double constantTerm) {
+    double interpolatedY = 0.0;
+    for (int i = 0; i < points.size(); i++) {
+        double li = 1.0;
+        for (int j = 0; j < points.size(); j++) {
+            if (i != j) {
+                li *= (x - points[j].first) / (double)(points[i].first - points[j].first);
+            }
+        }
+        interpolatedY += points[i].second * li;
+    }
+
+    return fabs(interpolatedY - y) < 1e-6; 
+}
+
 int main() {
     ifstream inputFile("input.json");
     json jsonData;
     inputFile >> jsonData;
+
     int n = jsonData["keys"]["n"];
     int k = jsonData["keys"]["k"];
+
+
     map<int, pair<int, string>> rootData;
     for (auto& el : jsonData.items()) {
         if (el.key() == "keys") continue; 
@@ -62,10 +91,53 @@ int main() {
         string encodedY = el.value()["value"];
         rootData[x] = {base, encodedY};
     }
-    vector<pair<int, unsigned long long>> points = extract(rootData, k);   
-    double constantTerm = solvelagrange(points);   
-    cout << "The constant term is: " << constantTerm << endl;
+
+    vector<pair<int, unsigned long long>> allPoints = extractPoints(rootData);
+
+    vector<int> indices(n, 0);
+    fill(indices.begin(), indices.begin() + k, 1); 
+
+    bool foundSolution = false;
+    vector<int> incorrectRoots;
+
+    do {
+        vector<pair<int, unsigned long long>> selectedPoints;
+        vector<pair<int, unsigned long long>> remainingPoints;
+
+        for (int i = 0; i < n; i++) {
+            if (indices[i] == 1) {
+                selectedPoints.push_back(allPoints[i]);
+            } else {
+                remainingPoints.push_back(allPoints[i]);
+            }
+        }
+
+        double constantTerm = lagrangeInterpolation(selectedPoints);
+
+        vector<int> currentIncorrectRoots;
+        for (auto& point : remainingPoints) {
+            if (!isPointConsistent(selectedPoints, point.first, point.second, constantTerm)) {
+                currentIncorrectRoots.push_back(point.first);
+            }
+        }
+
+        if (currentIncorrectRoots.size() <= 3) {  
+            foundSolution = true;
+            incorrectRoots = currentIncorrectRoots;
+            break;
+        }
+
+    } while (prev_permutation(indices.begin(), indices.end())); 
+
+    if (foundSolution) {
+        cout << " The incorrect roots as per the k value are: ";
+        for (int root : incorrectRoots) {
+            cout << root << " ";
+        }
+        cout << endl;
+    } else {
+        cout << "No solution found!" << endl;
+    }
 
     return 0;
 }
-
